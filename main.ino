@@ -185,6 +185,16 @@ int shoutIt() {
   return false;
 }
 
+  if (az > 8000) {
+    Serial.println("Orientation: UPRIGHT");
+  } else if (az < -8000) {
+    Serial.println("Orientation: UPSIDE DOWN");
+  } else {
+    Serial.println("Orientation: SIDEWAYS / MOVING");
+  }
+
+  delay(200);
+}
 
 /**
  * JOYSTICK
