@@ -21,18 +21,18 @@
 
 // Action Enum
 
-#define BOP_IT 0
-#define FLICK_IT 1
-#define PULL_IT 2
+#define BOP_IT 4
+#define PULL_IT 5
+#define FLICK_IT 0
+#define SLICE_IT 1
+#define TILT_IT 2
 #define SHOUT_IT 3
-#define SLICE_IT 4
-#define TILT_IT 5
 
 // For Gyroscope
 MPU6050 mpu;
 
 void setup() { 
-  Serial.begin(115200);              // Serial Output setup
+  Serial.begin(9600);              // Serial Output setup
   analogReadResolution(12);          // 0–4095 range
   analogSetAttenuation(ADC_11db);    // Good for microphones
   randomSeed(analogRead(0));         // Random number generator
@@ -54,38 +54,43 @@ unsigned long timer_millis = 3000; // Default is 3 seconds
 unsigned long action_delay = 1000; // Delay before setting action window timer
 unsigned long grace_period = 2000; // Delay between actions performed
 
-int round = 0;
+int current_round = 0;
 bool in_normal_mode = true;
 
-
 void loop() { 
-  // Select the mode by flicking the joystick
-  int flicked = flickIt();
-  int bopped = bopIt();
+  // // Select the mode by flicking the joystick
+  // int flicked = flickIt();
+  // int bopped = bopIt();
 
-  // Switches mode
-  if (flicked) { 
-    in_normal_mode = !in_normal_mode;
+  // // Switches mode
+  // if (flicked) { 
+  //   in_normal_mode = !in_normal_mode;
     
-    // Play audio for current mode
-    if (in_normal_mode) {
-      playAudioFile("normal_mode.mp3");
-    }
-    else {
-      playAudioFile("simon_mode.mp3");
-    }
-  }
+  //   // Play audio for current mode
+  //   if (in_normal_mode) {
+  //     playAudioFile("BOP-IT.mp3");
+  //   }
+  //   else {
+  //     playAudioFile("SLICE-IT.mp3");
+  //   }
+  // }
 
-  // Push the BOP-IT button to start the game
-  if (bopped) {
-    if (in_normal_mode) {
-      playNormalMode();
-    }
-    else {
-      playSimonMode();
-    }
-  }
+  // // Push the BOP-IT button to start the game
+  // if (bopped) {
+  //   countdown();
 
+  //   if (in_normal_mode) {
+  //     playNormalMode();
+  //   }
+  //   else {
+  //     playSimonMode();
+  //   }
+  // }
+
+  countdown();
+  playNormalMode();
+  restart();
+  delay(3000);
 
 }
 
@@ -97,7 +102,18 @@ Speaker : 0.40 inch Circle Button: 0.50 inch Circle Infared: 0.22 by 0.4 in Rect
 
 */
 
-int bopIt() { 
+bool bop_idle = true;
+
+int bopIt() {
+  int pressed = (digitalRead(BOPIT_PIN) == LOW);
+
+  if (pressed && bop_idle) {
+    bop_idle = false;
+    return true;
+  }
+  if (!pressed) {
+    bop_idle = true;   // reset when released
+  }
   return false;
 }
 
@@ -106,12 +122,33 @@ int bopIt() {
  * IR SENSOR
  * @returns TRUE if the sensor detects an object
  */
-int sliceIt() { 
-  int ir_value = digitalRead(IR_PIN); // High/Low Detection
-  return (ir_value == LOW); 
+bool ir_idle = true;
+
+int sliceIt() {
+  int active = (digitalRead(IR_PIN) == LOW);  // LOW = object detected
+
+  if (active && ir_idle) {
+    ir_idle = false;
+    return true;
+  }
+  if (!active) {
+    ir_idle = true;
+  }
+  return false;
 }
 
+bool pull_idle = true;
+
 int pullIt() {
+  int pulled = (digitalRead(PULLIT_PIN) == LOW);
+
+  if (pulled && pull_idle) {
+    pull_idle = false;
+    return true;
+  }
+  if (!pulled) {
+    pull_idle = true;  // reset only when released
+  }
   return false;
 }
 
@@ -120,25 +157,63 @@ int pullIt() {
  * 
  * @returns TRUE if input value is above the threshold
  */
+bool shout_idle = true;
+unsigned long shoutCooldown = 0;
+
 int shoutIt() {
   const int mic_threshold = 2200;
   int mic_value = analogRead(MIC_PIN);
-  return (mic_value > mic_threshold);
+
+  bool loud = mic_value > mic_threshold;
+
+  // Prevent retriggering for 150ms after each shout
+  if (millis() < shoutCooldown) {
+    if (!loud) shout_idle = true;
+    return false;
+  }
+
+  if (loud && shout_idle) {
+    shout_idle = false;
+    shoutCooldown = millis() + 150; // debounce / cooldown
+    return true;
+  }
+
+  if (!loud) {
+    shout_idle = true;
+  }
+
+  return false;
 }
+
 
 /**
  * JOYSTICK
  * 
  * @returns TRUE if any direction is inputted
  */
-int flickIt() {
+bool joystick_idle = true;  
+
+bool flickIt() {
   int xValue = analogRead(JOYSTICK_X_PIN); // 0–4095
   int yValue = analogRead(JOYSTICK_Y_PIN);
-  
-  int center = 2048; // Center of joystick reads this value
-  const int joystick_deadzone = 250;
 
-  return (abs(xValue - center) > joystick_deadzone) || (abs(yValue - center) > joystick_deadzone);
+  const int center = 2048;
+  const int deadzone = 250;
+
+  bool outside =
+    (abs(xValue - center) > deadzone) ||
+    (abs(yValue - center) > deadzone);
+
+  if (outside && joystick_idle) {
+    joystick_idle = false;   // we just detected the flick
+    return true;            // one-time trigger
+  }
+
+  if (!outside) {
+    joystick_idle = true;    // stick returned to center → ready for next flick
+  }
+
+  return false; // not a new flick
 }
 
 /**
@@ -174,14 +249,14 @@ int tiltIt() {
 
 void playAudioFile(String file) {
   Serial.print("PLAY:");
-  Serial.println(file); 
+  Serial.println(file + ".mp3"); 
 }
 
 void displayAction(int a) {
-  String actions[6] = {"BOP-IT", "FLICK-IT", "PULL-IT", "SHOUT-IT", "SLICE-IT", "TILT-IT"};
+  String actions[6] = {"FLICK-IT", "SLICE-IT", "TILT-IT", "SHOUT-IT", "BOP-IT", "PULL-IT"};
   String action = actions[a];
 
-  String filename = action + ".mp3";
+  String filename = action;
   playAudioFile(filename);
 }
 
@@ -191,11 +266,11 @@ void displayAction(int a) {
  */
 int selectAction() {
   int action;
-    if (in_normal_mode && round <= 6) {
-      action = round;
+    if (in_normal_mode && current_round <= 3) {
+      action = current_round - 1; // Actions are 0 indexed
     }
     else {
-      action = random(0, 6);
+      action = random(0, 3);
   }
   return action;
 }
@@ -251,12 +326,29 @@ int readInputs(int correct_input) {
   return -1;
 }
 
+// Countdown before starting a game
+void countdown() {
+  Serial.println("3...");
+  delay(1000);
+  Serial.println("2...");
+  delay(1000);
+  Serial.println("1...");
+  delay(1000);
+  Serial.println("GO!!!");
+  delay(1000);
+}
+
 void playNormalMode() {
   bool win = true;
-  while (++round <= 100) {
+  while (++current_round <= 100) {
     // After 10 rounds, reduce timer window by a quarter second (lowest time is half a second)
-    if (round % 10 == 0) {
-      timer_millis = max(timer_millis - 250UL, 500UL);
+    Serial.print("ROUND: ");
+    Serial.println(current_round);
+
+    if (current_round % 10 == 0) {
+      Serial.println("Faster!");
+      timer_millis = max(timer_millis - 300UL, 300UL);
+      grace_period = max(grace_period - 200UL, 200UL);
     }
 
     // Step 1: Randomly choose an action (the first 6 have a set pattern)
@@ -288,12 +380,12 @@ void playNormalMode() {
 
     // Step 5: Check if the correct input was performed, increase the score if so, end the game otherwise
     if (!success) {
-      Serial.println("WRONG!");
+      playAudioFile("WRONG");
       win = false;
       break;
     }
     else {
-      Serial.println("GOOD!");
+      playAudioFile("GOOD!");
     }
 
     // Step 6: Add in a recovery period before next action call
@@ -303,13 +395,15 @@ void playNormalMode() {
 
   // Step 7: Display score to player
   if (win) {
-    playAudioFile("you_win.mp3");
+    playAudioFile("YOU-WIN");
+    delay(2500);
   }
   else {
-    playAudioFile("you_lose.mp3");
+    playAudioFile("YOU-LOSE");
+    delay(2500);
   }
 
-  playAudioFile("your_score.mp3");
+  playAudioFile("YOUR-SCORE");
  
 }
 
@@ -323,6 +417,13 @@ void playSimonMode() {
   // Step 4: Check if the input is next in the sequence, if so continue until all correct actions are played.
   // Any failure results in a gameover
 
+}
+
+void restart() {
+  timer_millis = 3000; 
+  action_delay = 1000; 
+  grace_period = 2000; 
+  current_round = 0;
 }
 
 
