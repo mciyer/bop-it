@@ -2,11 +2,97 @@
 #include <Wire.h>
 #include <MPU6050.h>
 
-#define VRX_PIN 15
-#define VRY_PIN 13
+// Pins
 
+#define IR_PIN 32
+#define MIC_PIN 13
+#define JOYSTICK_X_PIN 27
+#define JOYSTICK_Y_PIN 26
+#define SDA_PIN 21
+#define SCL_PIN 22
+#define BOPIT_PIN 14
+#define PULLIT_PIN 12
 
-void setup() { Serial.begin(115200); }
+// Gyroscope States
+
+#define GYRO_CENTER 0
+#define GYRO_RIGHT 1
+#define GYRO_LEFT -1
+
+// Action Enum
+
+#define BOP_IT 4
+#define PULL_IT 5
+#define FLICK_IT 0
+#define SLICE_IT 1
+#define TILT_IT 2
+#define SHOUT_IT 3
+
+// For Gyroscope
+MPU6050 mpu;
+
+void setup() { 
+  Serial.begin(9600);              // Serial Output setup
+  analogReadResolution(12);          // 0–4095 range
+  analogSetAttenuation(ADC_11db);    // Good for microphones
+  randomSeed(esp_random());         // Random number generator
+
+  // Gyroscope Setup
+  Wire.begin(SDA_PIN, SCL_PIN);  // SDA, SCL on ESP32
+  mpu.initialize();
+
+  if (!mpu.testConnection()) {  
+    Serial.println("MPU6050 connection failed!");
+    while (1);
+  }
+
+  // Other Component Setup
+  pinMode(IR_PIN, INPUT); // IR Sensor
+}
+
+unsigned long timer_millis = 3000; // Default is 3 seconds
+unsigned long action_delay = 1000; // Delay before setting action window timer
+unsigned long grace_period = 2000; // Delay between actions performed
+
+int current_round = 0;
+bool in_normal_mode = true;
+
+void loop() { 
+  // // Select the mode by flicking the joystick
+  // int flicked = flickIt();
+  // int bopped = bopIt();
+
+  // // Switches mode
+  // if (flicked) { 
+  //   in_normal_mode = !in_normal_mode;
+    
+  //   // Play audio for current mode
+  //   if (in_normal_mode) {
+  //     playAudioFile("BOP-IT.mp3");
+  //   }
+  //   else {
+  //     playAudioFile("SLICE-IT.mp3");
+  //   }
+  // }
+
+  // // Push the BOP-IT button to start the game
+  // if (bopped) {
+  //   countdown();
+
+  //   if (in_normal_mode) {
+  //     playNormalMode();
+  //   }
+  //   else {
+  //     playSimonMode();
+  //   }
+  // }
+
+  countdown();
+  playNormalMode();
+  restart();
+  delay(3000);
+
+}
 
 //do interrupt instead of pulling would be faster and more effecient
 
@@ -16,63 +102,88 @@ Speaker : 0.40 inch Circle Button: 0.50 inch Circle Infared: 0.22 by 0.4 in Rect
 
 */
 
+bool bop_idle = true;
+
+int bopIt() {
+  int pressed = (digitalRead(BOPIT_PIN) == LOW);
+
+  if (pressed && bop_idle) {
+    bop_idle = false;
+    return true;
+  }
+  if (!pressed) {
+    bop_idle = true;   // reset when released
+  }
+  return false;
+}
 
 
-void bopIt() { static const byte buttons[] = {34, 0, 35};
-static bool initialized = false; static int prev = 0x00; static unsigned long timeout = 0; int data = 0; 
+/**
+ * IR SENSOR
+ * @returns TRUE if the sensor detects an object
+ */
+bool ir_idle = true;
 
-if (!initialized) { for (byte i = 0; i < 3; i++) pinMode(buttons[i], INPUT_PULLUP); initialized = true; }
+int sliceIt() {
+  int active = (digitalRead(IR_PIN) == LOW);  // LOW = object detected
 
-for (byte i = 0; i < 3; i++) if (digitalRead(buttons[i]) == LOW) data |= (1 << i);
+  if (active && ir_idle) {
+    ir_idle = false;
+    return true;
+  }
+  if (!active) {
+    ir_idle = true;
+  }
+  return false;
+}
 
-if (data != prev || millis() > timeout) { if (data != 0) { Serial.println("Button pressed");  } prev = data; timeout = millis() + 1000; }
+bool pull_idle = true;
 
-delay(10);  }
+int pullIt() {
+  int pulled = (digitalRead(PULLIT_PIN) == LOW);
 
-// const int IR_D0 = 32;
+  if (pulled && pull_idle) {
+    pull_idle = false;
+    return true;
+  }
+  if (!pulled) {
+    pull_idle = true;  // reset only when released
+  }
+  return false;
+}
 
-// void irTest() {
-//   static bool initialized = false;
+/**
+ * MICROPHONE
+ * 
+ * @returns TRUE if input value is above the threshold
+ */
+bool shout_idle = true;
+unsigned long shoutCooldown = 0;
 
-//   if (!initialized) {
-//     Serial.println("IR Sensor Test Started...");
-//     pinMode(IR_D0, INPUT);
-//     analogReadResolution(12);
-//     analogSetAttenuation(ADC_11db);
-//     initialized = true;
-//   }
+int shoutIt() {
+  const int mic_threshold = 2200;
+  int mic_value = analogRead(MIC_PIN);
 
-//   int digitalValue = digitalRead(IR_D0);
+  bool loud = mic_value > mic_threshold;
 
-//   if (digitalValue == HIGH) {
-//     Serial.println("NO OBJECT");
-//   } else {
-//     Serial.println("OBJECT DETECTED");
-//   }
-
-//   delay(100);
-// }
-
-void gyroTest() {
-    MPU6050 mpu;
-  static bool initialized = false;
-
-  if (!initialized) {
-    Serial.println("Initializing MPU6050...");
-    Wire.begin(21, 22);
-    mpu.initialize();
-
-    if (!mpu.testConnection()) {
-      Serial.println("MPU6050 connection failed!");
-    } else {
-      Serial.println("MPU6050 connected!");
-    }
-
-    initialized = true;
+  // Prevent retriggering for 150ms after each shout
+  if (millis() < shoutCooldown) {
+    if (!loud) shout_idle = true;
+    return false;
   }
 
-  int16_t ax, ay, az, gx, gy, gz;
-  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+  if (loud && shout_idle) {
+    shout_idle = false;
+    shoutCooldown = millis() + 150; // debounce / cooldown
+    return true;
+  }
+
+  if (!loud) {
+    shout_idle = true;
+  }
+
+  return false;
+}
 
   if (az > 8000) {
     Serial.println("Orientation: UPRIGHT");
@@ -85,72 +196,335 @@ void gyroTest() {
   delay(200);
 }
 
+/**
+ * JOYSTICK
+ * 
+ * @returns TRUE if any direction is inputted
+ */
+bool joystick_idle = true;  
 
-// void micTest() { static const int MIC_PIN = 34;
-//   static bool initialized = false;
+bool flickIt() {
+  int xValue = analogRead(JOYSTICK_X_PIN); // 0–4095
+  int yValue = analogRead(JOYSTICK_Y_PIN);
 
-//   if (!initialized) {
-//     Serial.println("Mic Test Started...");
-//     analogReadResolution(12);
-//     analogSetAttenuation(ADC_11db);
-//     initialized = true;
-//   }
+  const int center = 2048;
+  const int deadzone = 250;
 
-//   int micValue = analogRead(MIC_PIN);
+  bool outside =
+    (abs(xValue - center) > deadzone) ||
+    (abs(yValue - center) > deadzone);
 
-//   if (micValue > 2200) {
-//     Serial.println("LOUD");
-//   } else {
-//     Serial.println("SOFT");
-//   }
-
-//   delay(50);
-// }
-
-
-void FlickIt() {
-  static bool initialized = false;
-  static int xNeutral = 0;
-  static int yNeutral = 0;
-
-  const int DEADZONE = 400; // tighten deadzone for better accuracy
-
-  if (!initialized) {
-    Serial.println("Joystick Ready!");
-    xNeutral = analogRead(VRX_PIN); // measure neutral position
-    yNeutral = analogRead(VRY_PIN);
-    initialized = true;
+  if (outside && joystick_idle) {
+    joystick_idle = false;   // we just detected the flick
+    return true;            // one-time trigger
   }
 
-  int xValue = analogRead(VRX_PIN);
-  int yValue = analogRead(VRY_PIN);
-
-  String direction = "CENTER";
-
-
-  if (xValue < xNeutral - DEADZONE || xValue > xNeutral + DEADZONE|| yValue < yNeutral - DEADZONE || yValue > yNeutral + DEADZONE) direction = "Flicked";
-
-  if (direction != "CENTER") {
-    Serial.println(direction);
+  if (!outside) {
+    joystick_idle = true;    // stick returned to center → ready for next flick
   }
-  delay(200);
+
+  return false; // not a new flick
+}
+
+/**
+ * GYROSCOPE
+ * 
+ * @return 0 if center, 1 if tilt right, -1 if tilt left
+ */
+int tiltIt() {
+  static int last_state = GYRO_CENTER;   // persistent across calls
+  static bool waiting_for_center = false;
+
+  int16_t ax, ay, az, gx, gy, gz;
+  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+
+  // Because the board is mounted upside-down, invert Z
+  az = -az;
+
+  float ax_g = ax / 16384.0;
+  float az_g = az / 16384.0;
+
+  float angle = atan2(ax_g, az_g) * 180.0 / PI;
+
+  const float DEADZONE = 37.5;
+
+  int state = GYRO_CENTER;
+
+  if (angle > DEADZONE) {
+    state = GYRO_RIGHT;
+  } else if (angle < -DEADZONE) {
+    state = GYRO_LEFT;
+  } else {
+    state = GYRO_CENTER;
+  }
+
+  //  Waiting to return to center:
+  if (waiting_for_center) {
+    if (state == GYRO_CENTER) {
+      waiting_for_center = false;   // reset cycle
+    }
+    return GYRO_CENTER;  // suppress all outputs while held
+  }
+
+  // Detect a new tilt:
+  if (last_state == GYRO_CENTER && state != GYRO_CENTER) {
+    waiting_for_center = true;    // block until centered again
+    last_state = state;
+    return state;                 // this is the one valid tilt event
+  }
+
+  // Otherwise update last state and return center
+  last_state = state;
+  return GYRO_CENTER;
 }
 
 
-
-
-
-
-
-
-void loop() {
-  bopIt();
-  gyroTest();
-  // micTest();
-  // irTest();
-  //FlickIt();
+void playAudioFile(String file) {
+  Serial.println("PLAY:" + file + ".mp3");
 }
 
+void displayAction(int a) {
+  String actions[6] = {"FLICK-IT", "SLICE-IT", "TILT-IT", "SHOUT-IT", "BOP-IT", "PULL-IT"};
+  String action = actions[a];
 
+  String filename = action;
+  playAudioFile(filename);
+}
+
+/**
+ * Randomly the next action for the player to perform.
+ * If in normal mode, the first 6 actions are always the same
+ */
+int selectAction() {
+  int action;
+    if (in_normal_mode && current_round <= 6) {
+      action = current_round - 1; // Actions are 0 indexed
+    }
+    else {
+      action = random(0, 6);
+  }
+  return action;
+}
+
+int checkInput(int input, int expected_input) {
+  if (input == expected_input) {
+    return 0;
+  }
+  else {
+    return input + 1;
+  }
+}
+
+/**
+ * Reads inputs from components.
+ * 
+ * @param action the action the player must perform to score
+ * @returns 1 if correct is read, 0 if incorrect, -1 if nothing was performed
+ */
+int readInputs(int correct_input) {
+  int bop_value = bopIt();
+  int flick_value = flickIt();
+  int pull_value = pullIt();
+  int shout_value = shoutIt();
+  int slice_value = sliceIt();
+  int tilt_value = tiltIt();
+
+  if (bop_value) {
+    return checkInput(BOP_IT, correct_input);
+  }
+
+  if (flick_value) {
+    return checkInput(FLICK_IT, correct_input);
+  }
+
+  if (pull_value) {
+    return checkInput(PULL_IT, correct_input);
+  }
+
+  if (slice_value) {
+    return checkInput(SLICE_IT, correct_input);
+  }
+
+  if (tilt_value) {
+    return checkInput(TILT_IT, correct_input);
+  }
+
+  if (shout_value) {
+    return checkInput(SHOUT_IT, correct_input);
+  }
+
+  // No input recorded
+  return -1;
+}
+
+// Countdown before starting a game
+void countdown() {
+  Serial.println("3...");
+  delay(1000);
+  Serial.println("2...");
+  delay(1000);
+  Serial.println("1...");
+  delay(1000);
+  Serial.println("GO!!!");
+  delay(1000);
+}
+
+void playNormalMode() {
+  bool win = true;
+  while (++current_round <= 100) {
+    // After 10 rounds, reduce timer window by a quarter second (lowest time is half a second)
+    Serial.print("ROUND: ");
+    Serial.println(current_round);
+
+    if (current_round % 10 == 0) {
+      Serial.println("Faster!");
+      timer_millis = max(timer_millis - 300UL, 300UL);
+      grace_period = max(grace_period - 200UL, 200UL);
+    }
+
+    // Step 1: Randomly choose an action (the first 6 have a set pattern)
+    int action = selectAction();
+
+    // Step 2: Communicate the command to the player 
+    displayAction(action);
+    
+    delay(action_delay);
+
+    // Step 3: Start timer for how long the player has to act (the time limit decreases as rounds go on)
+    unsigned long start_time = millis();
+    
+    // Step 4: Read all inputs until the timer runs out
+    bool success = false;
+    while ((millis() - start_time) < timer_millis) {
+      int status = readInputs(action);
+
+      if (status == 0) { // Correct action inputted
+        success = true;
+        break;
+      }
+      
+      if (status > 0) { // Incorrect action inputted
+        success = false;
+        break;
+      }
+    }
+
+    // Step 5: Check if the correct input was performed, increase the score if so, end the game otherwise
+    if (!success) {
+      playAudioFile("WRONG");
+      win = false;
+      break;
+    }
+    else {
+      playAudioFile("GOOD!");
+    }
+
+    // Step 6: Add in a recovery period before next action call
+    delay(grace_period);
+
+  }
+
+  // Step 7: Display score to player
+  if (win) {
+    playAudioFile("YOU-WIN");
+    delay(2500);
+  }
+  else {
+    playAudioFile("YOU-LOSE");
+    delay(2500);
+  }
+
+  playAudioFile("YOUR-SCORE");
+ 
+}
+
+void playSimonMode() {
+  const int MAX_ROUNDS = 100;    // You can adjust this
+  int sequence[MAX_ROUNDS];
+  int seq_len = 0;
+
+  bool playing = true;
+
+  while (playing && seq_len < MAX_ROUNDS) {
+    current_round++;
+
+    // Step 1: Add new random action to the sequence
+    sequence[seq_len] = selectAction();
+    seq_len++;
+
+    // Step 2: Play back the full sequence to the player
+    for (int i = 0; i < seq_len; i++) {
+      displayAction(sequence[i]);
+      delay(1000);  // Delay between sequence steps (editable)
+    }
+
+    playAudioFile("REPEAT");
+
+    // Step 3: Wait for player to repeat the sequence
+    for (int i = 0; i < seq_len; i++) {
+      int expected = sequence[i];
+
+      unsigned long start = millis();
+      bool correct = false;
+
+      // Wait for player to input the correct action (no time limit)
+      while (true) {
+        int input_result = readInputs(expected);
+
+        if (input_result == 0) {
+          // Correct action
+          correct = true;
+          break;
+        }
+        else if (input_result > 0) {
+          // Wrong action
+          correct = false;
+          break;
+        }
+
+      }
+
+      // Check result
+      if (!correct) {
+        // FAILURE → Game Over
+        playing = false;
+        break;
+      }
+
+      // Play audio effect for all but last action in the sequence
+      if (i < seq_len - 1) {
+        playAudioFile("CORRECT");
+      }
+    
+      // Little gap before next expected input
+      delay(250);
+    }
+
+    // Pause before next round (sequence grows)
+    if (playing) {
+      // Performed the correct 
+      Serial.println();
+      playAudioFile("GOOD-JOB");
+      Serial.println();
+      delay(1500);
+    }
+  }
+  
+  // Step 4: End of game
+  if (playing)
+    playAudioFile("YOU-WIN");    
+  else
+    playAudioFile("YOU-LOSE");
+
+  playAudioFile("YOUR-SCORE");
+  
+}
+
+void restart() {
+  timer_millis = 3000; 
+  action_delay = 1000; 
+  grace_period = 2000; 
+  current_round = 0;
+}
 
 
