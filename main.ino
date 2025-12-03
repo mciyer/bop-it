@@ -35,7 +35,7 @@ void setup() {
   Serial.begin(9600);              // Serial Output setup
   analogReadResolution(12);          // 0–4095 range
   analogSetAttenuation(ADC_11db);    // Good for microphones
-  randomSeed(analogRead(0));         // Random number generator
+  randomSeed(esp_random());         // Random number generator
 
   // Gyroscope Setup
   Wire.begin(SDA_PIN, SCL_PIN);  // SDA, SCL on ESP32
@@ -222,34 +222,55 @@ bool flickIt() {
  * @return 0 if center, 1 if tilt right, -1 if tilt left
  */
 int tiltIt() {
+  static int last_state = GYRO_CENTER;   // persistent across calls
+  static bool waiting_for_center = false;
+
   int16_t ax, ay, az, gx, gy, gz;
   mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
   // Because the board is mounted upside-down, invert Z
   az = -az;
 
-  // Convert to g units (default 2g range)
   float ax_g = ax / 16384.0;
   float az_g = az / 16384.0;
 
-  // Compute tilt angle along the board's long axis
   float angle = atan2(ax_g, az_g) * 180.0 / PI;
 
   const float DEADZONE = 37.5;
 
+  int state = GYRO_CENTER;
+
   if (angle > DEADZONE) {
-    return GYRO_RIGHT;
-  } 
-  else if (angle < -DEADZONE) {
-    return GYRO_LEFT;
+    state = GYRO_RIGHT;
+  } else if (angle < -DEADZONE) {
+    state = GYRO_LEFT;
+  } else {
+    state = GYRO_CENTER;
   }
 
+  //  Waiting to return to center:
+  if (waiting_for_center) {
+    if (state == GYRO_CENTER) {
+      waiting_for_center = false;   // reset cycle
+    }
+    return GYRO_CENTER;  // suppress all outputs while held
+  }
+
+  // Detect a new tilt:
+  if (last_state == GYRO_CENTER && state != GYRO_CENTER) {
+    waiting_for_center = true;    // block until centered again
+    last_state = state;
+    return state;                 // this is the one valid tilt event
+  }
+
+  // Otherwise update last state and return center
+  last_state = state;
   return GYRO_CENTER;
 }
 
+
 void playAudioFile(String file) {
-  Serial.print("PLAY:");
-  Serial.println(file + ".mp3"); 
+  Serial.println("PLAY:" + file + ".mp3");
 }
 
 void displayAction(int a) {
@@ -266,11 +287,11 @@ void displayAction(int a) {
  */
 int selectAction() {
   int action;
-    if (in_normal_mode && current_round <= 3) {
+    if (in_normal_mode && current_round <= 6) {
       action = current_round - 1; // Actions are 0 indexed
     }
     else {
-      action = random(0, 3);
+      action = random(0, 6);
   }
   return action;
 }
@@ -291,24 +312,24 @@ int checkInput(int input, int expected_input) {
  * @returns 1 if correct is read, 0 if incorrect, -1 if nothing was performed
  */
 int readInputs(int correct_input) {
-  // int bop_value = bopIt();
+  int bop_value = bopIt();
   int flick_value = flickIt();
-  // int pull_value = pullIt();
+  int pull_value = pullIt();
   int shout_value = shoutIt();
   int slice_value = sliceIt();
   int tilt_value = tiltIt();
 
-  // if (bop_value) {
-  //   return checkInput(BOP_IT, correct_input);
-  // }
+  if (bop_value) {
+    return checkInput(BOP_IT, correct_input);
+  }
 
   if (flick_value) {
     return checkInput(FLICK_IT, correct_input);
   }
 
-  // if (pull_value) {
-  //   return checkInput(PULL_IT, correct_input);
-  // }
+  if (pull_value) {
+    return checkInput(PULL_IT, correct_input);
+  }
 
   if (slice_value) {
     return checkInput(SLICE_IT, correct_input);
@@ -408,15 +429,85 @@ void playNormalMode() {
 }
 
 void playSimonMode() {
-  // Step 1: Randomly choose an action
+  const int MAX_ROUNDS = 100;    // You can adjust this
+  int sequence[MAX_ROUNDS];
+  int seq_len = 0;
 
-  // Step 2: Repeat all the subsequent action to the player
+  bool playing = true;
 
-  // Step 3: Read all inputs, wait until one is read as true
+  while (playing && seq_len < MAX_ROUNDS) {
+    current_round++;
 
-  // Step 4: Check if the input is next in the sequence, if so continue until all correct actions are played.
-  // Any failure results in a gameover
+    // Step 1: Add new random action to the sequence
+    sequence[seq_len] = selectAction();
+    seq_len++;
 
+    // Step 2: Play back the full sequence to the player
+    for (int i = 0; i < seq_len; i++) {
+      displayAction(sequence[i]);
+      delay(1000);  // Delay between sequence steps (editable)
+    }
+
+    playAudioFile("REPEAT");
+
+    // Step 3: Wait for player to repeat the sequence
+    for (int i = 0; i < seq_len; i++) {
+      int expected = sequence[i];
+
+      unsigned long start = millis();
+      bool correct = false;
+
+      // Wait for player to input the correct action (no time limit)
+      while (true) {
+        int input_result = readInputs(expected);
+
+        if (input_result == 0) {
+          // Correct action
+          correct = true;
+          break;
+        }
+        else if (input_result > 0) {
+          // Wrong action
+          correct = false;
+          break;
+        }
+
+      }
+
+      // Check result
+      if (!correct) {
+        // FAILURE → Game Over
+        playing = false;
+        break;
+      }
+
+      // Play audio effect for all but last action in the sequence
+      if (i < seq_len - 1) {
+        playAudioFile("CORRECT");
+      }
+    
+      // Little gap before next expected input
+      delay(250);
+    }
+
+    // Pause before next round (sequence grows)
+    if (playing) {
+      // Performed the correct 
+      Serial.println();
+      playAudioFile("GOOD-JOB");
+      Serial.println();
+      delay(1500);
+    }
+  }
+  
+  // Step 4: End of game
+  if (playing)
+    playAudioFile("YOU-WIN");    
+  else
+    playAudioFile("YOU-LOSE");
+
+  playAudioFile("YOUR-SCORE");
+  
 }
 
 void restart() {
