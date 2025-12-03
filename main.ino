@@ -21,12 +21,12 @@
 
 // Action Enum
 
-#define BOP_IT 4
-#define PULL_IT 5
-#define FLICK_IT 0
-#define SLICE_IT 1
-#define TILT_IT 2
-#define SHOUT_IT 3
+#define BOP_IT 0
+#define PULL_IT 1
+#define FLICK_IT 2
+#define SLICE_IT 3
+#define TILT_IT 4
+#define SHOUT_IT 5
 
 // For Gyroscope
 MPU6050 mpu;
@@ -185,17 +185,6 @@ int shoutIt() {
   return false;
 }
 
-  if (az > 8000) {
-    Serial.println("Orientation: UPRIGHT");
-  } else if (az < -8000) {
-    Serial.println("Orientation: UPSIDE DOWN");
-  } else {
-    Serial.println("Orientation: SIDEWAYS / MOVING");
-  }
-
-  delay(200);
-}
-
 /**
  * JOYSTICK
  * 
@@ -284,7 +273,7 @@ void playAudioFile(String file) {
 }
 
 void displayAction(int a) {
-  String actions[6] = {"FLICK-IT", "SLICE-IT", "TILT-IT", "SHOUT-IT", "BOP-IT", "PULL-IT"};
+  String actions[6] = {"BOP-IT", "PULL-IT", "FLICK-IT", "SLICE-IT", "TILT-IT", "SHOUT-IT"};
   String action = actions[a];
 
   String filename = action;
