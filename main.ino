@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <MPU6050.h>
+#include <audio_files.h>
 
 // Pins
 
@@ -10,7 +11,7 @@
 #define JOYSTICK_Y_PIN 26
 #define SDA_PIN 21
 #define SCL_PIN 22
-#define BOPIT_PIN 14
+#define BOPIT_PIN 19
 #define PULLIT_PIN 12
 
 // Gyroscope States
@@ -91,6 +92,7 @@ void loop() {
   playNormalMode();
   restart();
   delay(3000);
+
 
 }
 
@@ -269,11 +271,11 @@ int tiltIt() {
 
 
 void playAudioFile(String file) {
-  Serial.println("PLAY:" + file + ".mp3");
+  Serial.println("PLAY:" + file);
 }
 
 void displayAction(int a) {
-  String actions[6] = {"BOP-IT", "PULL-IT", "FLICK-IT", "SLICE-IT", "TILT-IT", "SHOUT-IT"};
+  String actions[6] = {MP3_BOP_IT, MP3_PULL_IT, MP3_FLICK_IT, MP3_SLICE_IT, MP3_TILT_IT, MP3_SHOUT_IT};
   String action = actions[a];
 
   String filename = action;
@@ -348,13 +350,13 @@ int readInputs(int correct_input) {
 
 // Countdown before starting a game
 void countdown() {
-  Serial.println("3...");
+  Serial.println(MP3_COUNTDOWN_3);
   delay(1000);
-  Serial.println("2...");
+  Serial.println(MP3_COUNTDOWN_2);
   delay(1000);
-  Serial.println("1...");
+  Serial.println(MP3_COUNTDOWN_1);
   delay(1000);
-  Serial.println("GO!!!");
+  Serial.println(MP3_GO);
   delay(1000);
 }
 
@@ -362,29 +364,23 @@ void playNormalMode() {
   bool win = true;
   while (++current_round <= 100) {
     // After 10 rounds, reduce timer window by a quarter second (lowest time is half a second)
-    Serial.print("ROUND: ");
-    Serial.println(current_round);
-
     if (current_round % 10 == 0) {
-      Serial.println("Faster!");
       timer_millis = max(timer_millis - 300UL, 300UL);
       grace_period = max(grace_period - 200UL, 200UL);
     }
 
     // Step 1: Randomly choose an action (the first 6 have a set pattern)
-    int action = selectAction();
+    int action = 0;
 
     // Step 2: Communicate the command to the player 
     displayAction(action);
     
-    delay(action_delay);
-
     // Step 3: Start timer for how long the player has to act (the time limit decreases as rounds go on)
     unsigned long start_time = millis();
     
     // Step 4: Read all inputs until the timer runs out
     bool success = false;
-    while ((millis() - start_time) < timer_millis) {
+    while ((millis() - start_time) < timer_millis + action_delay) {
       int status = readInputs(action);
 
       if (status == 0) { // Correct action inputted
@@ -400,12 +396,12 @@ void playNormalMode() {
 
     // Step 5: Check if the correct input was performed, increase the score if so, end the game otherwise
     if (!success) {
-      playAudioFile("WRONG");
+      playAudioFile(MP3_WRONG);
       win = false;
       break;
     }
     else {
-      playAudioFile("GOOD!");
+      playAudioFile(MP3_GOOD);
     }
 
     // Step 6: Add in a recovery period before next action call
@@ -415,15 +411,15 @@ void playNormalMode() {
 
   // Step 7: Display score to player
   if (win) {
-    playAudioFile("YOU-WIN");
+    playAudioFile(MP3_WIN);
     delay(2500);
   }
   else {
-    playAudioFile("YOU-LOSE");
+    playAudioFile(MP3_LOSE);
     delay(2500);
   }
 
-  playAudioFile("YOUR-SCORE");
+  playAudioFile(MP3_SCORE);
  
 }
 
@@ -447,7 +443,7 @@ void playSimonMode() {
       delay(1000);  // Delay between sequence steps (editable)
     }
 
-    playAudioFile("REPEAT");
+    playAudioFile(MP3_REPEAT);
 
     // Step 3: Wait for player to repeat the sequence
     for (int i = 0; i < seq_len; i++) {
@@ -482,7 +478,7 @@ void playSimonMode() {
 
       // Play audio effect for all but last action in the sequence
       if (i < seq_len - 1) {
-        playAudioFile("CORRECT");
+        playAudioFile(MP3_GOOD);
       }
     
       // Little gap before next expected input
@@ -493,7 +489,7 @@ void playSimonMode() {
     if (playing) {
       // Performed the correct 
       Serial.println();
-      playAudioFile("GOOD-JOB");
+      playAudioFile(MP3_GOOD_JOB);
       Serial.println();
       delay(1500);
     }
@@ -501,11 +497,11 @@ void playSimonMode() {
   
   // Step 4: End of game
   if (playing)
-    playAudioFile("YOU-WIN");    
+    playAudioFile(MP3_WIN);    
   else
-    playAudioFile("YOU-LOSE");
+    playAudioFile(MP3_LOSE);
 
-  playAudioFile("YOUR-SCORE");
+  playAudioFile(MP3_SCORE);
   
 }
 
