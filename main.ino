@@ -5,13 +5,13 @@
 
 // Pins
 
-#define IR_PIN 32
+#define IR_PIN 25
 #define MIC_PIN 13
 #define JOYSTICK_X_PIN 27
 #define JOYSTICK_Y_PIN 26
 #define SDA_PIN 21
 #define SCL_PIN 22
-#define BOPIT_PIN 19
+#define BOPIT_PIN 34
 #define PULLIT_PIN 12
 
 // Gyroscope States
@@ -23,17 +23,54 @@
 // Action Enum
 
 #define BOP_IT 0
-#define PULL_IT 1
-#define FLICK_IT 2
-#define SLICE_IT 3
-#define TILT_IT 4
-#define SHOUT_IT 5
+#define FLICK_IT 1
+#define SLICE_IT 2
+#define TILT_IT 3
+#define SHOUT_IT 4
+#define PULL_IT 5
+
+#define NUM_PARTS 5
+#define MAX_ROUNDS 100
+
+String VOICE_COMMAND[NUM_PARTS] = {
+  MP3_BOP_IT,
+  MP3_FLICK_IT,
+  MP3_SLICE_IT,
+  MP3_TILT_IT,
+  MP3_SHOUT_IT
+  // MP3_PULL_IT
+};
+
+String SOUND_EFFECT_ACTIONS[NUM_PARTS] = {
+  MP3_EFFECT_BOP, 
+  MP3_EFFECT_FLICK, 
+  MP3_EFFECT_SLICE, 
+  MP3_EFFECT_TILT, 
+  MP3_EFFECT_SHOUT
+  // MP3_EFFECT_PULL
+};
+
+String LOSE_PHRASES[10] = {
+  MP3_LOSE_1,
+  MP3_LOSE_2,     
+  MP3_LOSE_3,      
+  MP3_LOSE_4,     
+  MP3_LOSE_5,      
+  MP3_LOSE_6,      
+  MP3_LOSE_7,     
+  MP3_LOSE_8,      
+  MP3_LOSE_9,      
+  MP3_LOSE_10    
+};
 
 // For Gyroscope
 MPU6050 mpu;
 
 void setup() { 
-  Serial.begin(9600);              // Serial Output setup
+  Serial.begin(115200);              // Serial Output setup
+  delay(2000);     // WAIT for Processing to open USB bridge
+  Serial.println("ESP32 READY");
+
   analogReadResolution(12);          // 0–4095 range
   analogSetAttenuation(ADC_11db);    // Good for microphones
   randomSeed(esp_random());         // Random number generator
@@ -49,60 +86,321 @@ void setup() {
 
   // Other Component Setup
   pinMode(IR_PIN, INPUT); // IR Sensor
+  pinMode(BOPIT_PIN, INPUT_PULLUP);
 }
 
-unsigned long timer_millis = 3000; // Default is 3 seconds
-unsigned long action_delay = 1000; // Delay before setting action window timer
-unsigned long grace_period = 2000; // Delay between actions performed
+unsigned long timer_millis; // Default is 2 seconds
+unsigned long grace_period; // Delay between actions performed
 
 int current_round = 0;
 bool in_normal_mode = true;
+String soundtrack_file_path = MP3_SOUNDTRACK_1; // Soundtrack for normal mode
 
-void loop() { 
-  // // Select the mode by flicking the joystick
-  // int flicked = flickIt();
-  // int bopped = bopIt();
-
-  // // Switches mode
-  // if (flicked) { 
-  //   in_normal_mode = !in_normal_mode;
-    
-  //   // Play audio for current mode
-  //   if (in_normal_mode) {
-  //     playAudioFile("BOP-IT.mp3");
-  //   }
-  //   else {
-  //     playAudioFile("SLICE-IT.mp3");
-  //   }
-  // }
-
-  // // Push the BOP-IT button to start the game
-  // if (bopped) {
-  //   countdown();
-
-  //   if (in_normal_mode) {
-  //     playNormalMode();
-  //   }
-  //   else {
-  //     playSimonMode();
-  //   }
-  // }
-
-  countdown();
-  playNormalMode();
+void loop() {
+  // playAudioFile(MP3_START_GAME); // "Bop it to start!"
   restart();
-  delay(3000);
 
+  // Select the mode by flicking the joystick
+  int flicked = flickIt();
+  int bopped = bopIt();
+
+  if (flicked) {  // Switches mode
+    in_normal_mode = !in_normal_mode;
+    
+    // Play audio for current mode
+    if (in_normal_mode) {
+      playAudioFile(MP3_NORMAL_MODE);
+      soundtrack_file_path = MP3_SOUNDTRACK_1;
+    }
+    else {
+      playAudioFile(MP3_SIMON_MODE);
+      soundtrack_file_path = MP3_SOUNDTRACK_2;
+    }
+  }
+
+  // Push the BOP-IT button to start the game
+  if (bopped) {
+    countdown();
+
+    if (in_normal_mode) {
+      playNormalMode();
+    }
+    else {
+      playSimonMode();
+    }
+  }
+
+  delay(1000);
+  playAudioFile(MP3_PLAY_AGAIN);
 
 }
 
-//do interrupt instead of pulling would be faster and more effecient
+void playAudioFile(String file) {
+  Serial.println("PLAY:" + file);
+}
 
-/*Calibers for parts
+void announceScore(String score) {
+  playAudioFile(MP3_SCORE);
+  Serial.println("SCORE:" + score);
+}
 
-Speaker : 0.40 inch Circle Button: 0.50 inch Circle Infared: 0.22 by 0.4 in Rectangle Pull it Button: 0.15 in Circle
+void startSoundtrack() {
+  String track = soundtrack_file_path;
+  Serial.println("START:" + track);
+}
 
-*/
+void stopSoundtrack() {
+  String track = soundtrack_file_path;
+  Serial.println("STOP:" + track);
+}
+
+void increaseSpeed() {
+  String track = soundtrack_file_path;
+  Serial.println("INC:" + track);
+}
+
+void displayAction(int a) {
+  playAudioFile(VOICE_COMMAND[a]);
+}
+
+void playLosePhrase() {
+  playAudioFile(LOSE_PHRASES[random(0, 10)]);
+  delay(3000); // Ensures audio clip finishes
+}
+
+/**
+ * Randomly the next action for the player to perform.
+ * If in normal mode, the first 6 actions are always the same
+ */
+int selectAction() {
+  int action;
+    if (in_normal_mode && current_round <= NUM_PARTS) {
+      action = current_round - 1; // Actions are 0 indexed
+    }
+    else {
+      action = random(0, NUM_PARTS);
+  }
+  return action;
+}
+
+int checkInput(int input, int expected_input) {
+  if (input == expected_input) {
+    return 0;
+  }
+  else {
+    return input + 1;
+  }
+}
+
+/**
+ * Reads inputs from components.
+ * 
+ * @param action the action the player must perform to score
+ * @returns 1 if correct is read, 0 if incorrect, -1 if nothing was performed
+ */
+int readInputs(int correct_input) {
+  int bop_value = bopIt();
+  int flick_value = flickIt();
+  // int pull_value = pullIt();
+  int shout_value = shoutIt();
+  int slice_value = sliceIt();
+  int tilt_value = tiltIt();
+
+  if (flick_value) {
+    return checkInput(FLICK_IT, correct_input);
+  }
+
+  if (slice_value) {
+    return checkInput(SLICE_IT, correct_input);
+  }
+
+  if (bop_value) {
+    return checkInput(BOP_IT, correct_input);
+  }
+
+  // if (pull_value) {
+  //   return checkInput(PULL_IT, correct_input);
+  // }
+
+  if (tilt_value) {
+    return checkInput(TILT_IT, correct_input);
+  }
+
+  if (shout_value && correct_input == SHOUT_IT) {
+    return checkInput(SHOUT_IT, correct_input);
+  }
+
+  // No input recorded
+  return -1;
+}
+
+// Countdown before starting a game
+void countdown() {
+  playAudioFile(MP3_COUNTDOWN_3);
+  delay(1000);
+  playAudioFile(MP3_COUNTDOWN_2);
+  delay(1000);
+  playAudioFile(MP3_COUNTDOWN_1);
+  delay(1000);
+  playAudioFile(MP3_GO);
+  delay(1000);
+}
+
+void gameover(bool win) {
+  if (win) {
+    announceScore(String(current_round));
+    delay(1000);
+    playAudioFile(MP3_WIN);
+    delay(2500);
+  }
+  else {
+    playLosePhrase();
+    announceScore(String(current_round));
+    delay(1000);
+  }
+}
+
+void playNormalMode() {
+  startSoundtrack();
+  bool win = true;
+  while (++current_round <= MAX_ROUNDS) {
+    // After 10 rounds, reduce timer window by a quarter second (lowest time is half a second)
+    if (current_round % 10 == 0) {
+      timer_millis = max(timer_millis - 300UL, 250UL);
+      grace_period = max(grace_period - 200UL, 100UL);
+
+      increaseSpeed();
+    }
+
+    // Step 1: Randomly choose an action (the first 6 have a set pattern)
+    int action = selectAction();
+
+    // Step 2: Communicate the command to the player 
+    displayAction(action);
+
+    // Step 3: Start timer for how long the player has to act (the time limit decreases as rounds go on)
+    unsigned long start_time = millis();
+    
+    // Step 4: Read all inputs until the timer runs out
+    bool success = false;
+    while ((millis() - start_time) < timer_millis) {
+      int status = readInputs(action);
+
+      if (status == 0) { // Correct action inputted
+        success = true;
+        break;
+      }
+      
+      if (status > 0) { // Incorrect action inputted
+        success = false;
+        break;
+      }
+    }
+
+    // Step 5: Check if the correct input was performed, increase the score if so, end the game otherwise
+    if (!success) {
+      win = false;
+      break;
+    }
+    else {
+      playAudioFile(SOUND_EFFECT_ACTIONS[action]);
+    }
+
+    // Step 6: Add in a recovery period before next action call
+    delay(grace_period);
+
+  }
+
+  stopSoundtrack();
+
+  // Step 7: Display score to player
+  gameover(win);
+ 
+}
+
+void playSimonMode() { 
+  int sequence[MAX_ROUNDS];
+  int seq_len = 0;
+
+  bool playing = true;
+
+  while (playing && seq_len < MAX_ROUNDS) {
+    current_round++;
+
+    // Step 1: Add new random action to the sequence
+    sequence[seq_len] = selectAction();
+    seq_len++;
+
+    // Step 2: Play back the full sequence to the player
+    for (int i = 0; i < seq_len; i++) {
+      displayAction(sequence[i]);
+      delay(1000);  // Delay between sequence steps (editable)
+    }
+
+    playAudioFile(MP3_REPEAT);
+
+    // Step 3: Wait for player to repeat the sequence
+    for (int i = 0; i < seq_len; i++) {
+      int expected = sequence[i];
+
+      unsigned long start = millis();
+      bool correct = false;
+
+      // Wait for player to input the correct action (no time limit)
+      while (true) {
+        int input_result = readInputs(expected);
+
+        if (input_result == 0) {
+          // Correct action
+          correct = true;
+          break;
+        }
+        else if (input_result > 0) {
+          // Wrong action
+          correct = false;
+          break;
+        }
+
+      }
+
+      // Check result
+      if (!correct) {
+        // FAILURE → Game Over
+        playing = false;
+        break;
+      }
+
+      // Play audio effect for all but last action in the sequence
+
+      playAudioFile(SOUND_EFFECT_ACTIONS[expected]);
+      
+    
+      // Little gap before next expected input
+      delay(250);
+    }
+
+    // Pause before next round (sequence grows)
+    if (playing) {
+      // Performed the correct 
+      delay(1000);
+      Serial.println();
+      playAudioFile(MP3_GOOD_JOB);
+      Serial.println();
+      delay(1500);
+    }
+  }
+  
+  // Step 4: End of game
+  gameover(playing);
+
+}
+
+void restart() {
+  timer_millis = 2500; 
+  grace_period = 2000; 
+  current_round = 0;
+}
+
 
 bool bop_idle = true;
 
@@ -118,7 +416,6 @@ int bopIt() {
   }
   return false;
 }
-
 
 /**
  * IR SENSOR
@@ -232,10 +529,10 @@ int tiltIt() {
   // Because the board is mounted upside-down, invert Z
   az = -az;
 
-  float ax_g = ax / 16384.0;
+  float ay_g = ay / 16384.0;
   float az_g = az / 16384.0;
 
-  float angle = atan2(ax_g, az_g) * 180.0 / PI;
+  float angle = atan2(ay_g, az_g) * 180.0 / PI;
 
   const float DEADZONE = 37.5;
 
@@ -267,249 +564,6 @@ int tiltIt() {
   // Otherwise update last state and return center
   last_state = state;
   return GYRO_CENTER;
-}
-
-
-void playAudioFile(String file) {
-  Serial.println("PLAY:" + file);
-}
-
-void displayAction(int a) {
-  String actions[6] = {MP3_BOP_IT, MP3_PULL_IT, MP3_FLICK_IT, MP3_SLICE_IT, MP3_TILT_IT, MP3_SHOUT_IT};
-  String action = actions[a];
-
-  String filename = action;
-  playAudioFile(filename);
-}
-
-/**
- * Randomly the next action for the player to perform.
- * If in normal mode, the first 6 actions are always the same
- */
-int selectAction() {
-  int action;
-    if (in_normal_mode && current_round <= 6) {
-      action = current_round - 1; // Actions are 0 indexed
-    }
-    else {
-      action = random(0, 6);
-  }
-  return action;
-}
-
-int checkInput(int input, int expected_input) {
-  if (input == expected_input) {
-    return 0;
-  }
-  else {
-    return input + 1;
-  }
-}
-
-/**
- * Reads inputs from components.
- * 
- * @param action the action the player must perform to score
- * @returns 1 if correct is read, 0 if incorrect, -1 if nothing was performed
- */
-int readInputs(int correct_input) {
-  int bop_value = bopIt();
-  int flick_value = flickIt();
-  int pull_value = pullIt();
-  int shout_value = shoutIt();
-  int slice_value = sliceIt();
-  int tilt_value = tiltIt();
-
-  if (bop_value) {
-    return checkInput(BOP_IT, correct_input);
-  }
-
-  if (flick_value) {
-    return checkInput(FLICK_IT, correct_input);
-  }
-
-  if (pull_value) {
-    return checkInput(PULL_IT, correct_input);
-  }
-
-  if (slice_value) {
-    return checkInput(SLICE_IT, correct_input);
-  }
-
-  if (tilt_value) {
-    return checkInput(TILT_IT, correct_input);
-  }
-
-  if (shout_value) {
-    return checkInput(SHOUT_IT, correct_input);
-  }
-
-  // No input recorded
-  return -1;
-}
-
-// Countdown before starting a game
-void countdown() {
-  Serial.println(MP3_COUNTDOWN_3);
-  delay(1000);
-  Serial.println(MP3_COUNTDOWN_2);
-  delay(1000);
-  Serial.println(MP3_COUNTDOWN_1);
-  delay(1000);
-  Serial.println(MP3_GO);
-  delay(1000);
-}
-
-void playNormalMode() {
-  bool win = true;
-  while (++current_round <= 100) {
-    // After 10 rounds, reduce timer window by a quarter second (lowest time is half a second)
-    if (current_round % 10 == 0) {
-      timer_millis = max(timer_millis - 300UL, 300UL);
-      grace_period = max(grace_period - 200UL, 200UL);
-    }
-
-    // Step 1: Randomly choose an action (the first 6 have a set pattern)
-    int action = 0;
-
-    // Step 2: Communicate the command to the player 
-    displayAction(action);
-    
-    // Step 3: Start timer for how long the player has to act (the time limit decreases as rounds go on)
-    unsigned long start_time = millis();
-    
-    // Step 4: Read all inputs until the timer runs out
-    bool success = false;
-    while ((millis() - start_time) < timer_millis + action_delay) {
-      int status = readInputs(action);
-
-      if (status == 0) { // Correct action inputted
-        success = true;
-        break;
-      }
-      
-      if (status > 0) { // Incorrect action inputted
-        success = false;
-        break;
-      }
-    }
-
-    // Step 5: Check if the correct input was performed, increase the score if so, end the game otherwise
-    if (!success) {
-      playAudioFile(MP3_WRONG);
-      win = false;
-      break;
-    }
-    else {
-      playAudioFile(MP3_GOOD);
-    }
-
-    // Step 6: Add in a recovery period before next action call
-    delay(grace_period);
-
-  }
-
-  // Step 7: Display score to player
-  if (win) {
-    playAudioFile(MP3_WIN);
-    delay(2500);
-  }
-  else {
-    playAudioFile(MP3_LOSE);
-    delay(2500);
-  }
-
-  playAudioFile(MP3_SCORE);
- 
-}
-
-void playSimonMode() {
-  const int MAX_ROUNDS = 100;    // You can adjust this
-  int sequence[MAX_ROUNDS];
-  int seq_len = 0;
-
-  bool playing = true;
-
-  while (playing && seq_len < MAX_ROUNDS) {
-    current_round++;
-
-    // Step 1: Add new random action to the sequence
-    sequence[seq_len] = selectAction();
-    seq_len++;
-
-    // Step 2: Play back the full sequence to the player
-    for (int i = 0; i < seq_len; i++) {
-      displayAction(sequence[i]);
-      delay(1000);  // Delay between sequence steps (editable)
-    }
-
-    playAudioFile(MP3_REPEAT);
-
-    // Step 3: Wait for player to repeat the sequence
-    for (int i = 0; i < seq_len; i++) {
-      int expected = sequence[i];
-
-      unsigned long start = millis();
-      bool correct = false;
-
-      // Wait for player to input the correct action (no time limit)
-      while (true) {
-        int input_result = readInputs(expected);
-
-        if (input_result == 0) {
-          // Correct action
-          correct = true;
-          break;
-        }
-        else if (input_result > 0) {
-          // Wrong action
-          correct = false;
-          break;
-        }
-
-      }
-
-      // Check result
-      if (!correct) {
-        // FAILURE → Game Over
-        playing = false;
-        break;
-      }
-
-      // Play audio effect for all but last action in the sequence
-      if (i < seq_len - 1) {
-        playAudioFile(MP3_GOOD);
-      }
-    
-      // Little gap before next expected input
-      delay(250);
-    }
-
-    // Pause before next round (sequence grows)
-    if (playing) {
-      // Performed the correct 
-      Serial.println();
-      playAudioFile(MP3_GOOD_JOB);
-      Serial.println();
-      delay(1500);
-    }
-  }
-  
-  // Step 4: End of game
-  if (playing)
-    playAudioFile(MP3_WIN);    
-  else
-    playAudioFile(MP3_LOSE);
-
-  playAudioFile(MP3_SCORE);
-  
-}
-
-void restart() {
-  timer_millis = 3000; 
-  action_delay = 1000; 
-  grace_period = 2000; 
-  current_round = 0;
 }
 
 

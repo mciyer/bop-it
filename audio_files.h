@@ -1,27 +1,47 @@
 // Voice-Acted
-#define MP3_GOOD        "GOOD.mp3"
-#define MP3_WRONG       "WRONG.mp3"
+#define MP3_NORMAL_MODE "NORMAL-MODE.mp3"
+#define MP3_SIMON_MODE  "SIMON-MODE.mp3"
+#define MP3_START_GAME  "START-GAME.mp3"
 
-#define MP3_BOP_IT      "BOP-IT.mp3"
-#define MP3_PULL_IT     "PULL-IT.mp3"
-#define MP3_FLICK_IT    "FLICK-IT.mp3"
-#define MP3_SLICE_IT    "SLICE-IT.mp3"
-#define MP3_TILT_IT     "TILT-IT.mp3"
-#define MP3_SHOUT_IT    "SHOUT-IT.mp3"
+// Action Commands
+#define MP3_BOP_IT      "ACT-BOP-IT.mp3"
+#define MP3_PULL_IT     "ACT-PULL-IT.mp3"
+#define MP3_FLICK_IT    "ACT-FLICK-IT.mp3"
+#define MP3_SLICE_IT    "ACT-SLICE-IT.mp3"
+#define MP3_TILT_IT     "ACT-TILT-IT.mp3"
+#define MP3_SHOUT_IT    "ACT-SHOUT-IT.mp3"
 
+// Countdown
 #define MP3_COUNTDOWN_1 "COUNTDOWN-1.mp3"
 #define MP3_COUNTDOWN_2 "COUNTDOWN-2.mp3"
 #define MP3_COUNTDOWN_3 "COUNTDOWN-3.mp3"
 #define MP3_GO          "GO.mp3"
 
+// When game is over
 #define MP3_WIN         "WIN.mp3"
-#define MP3_LOSE        "LOSE.mp3"
 #define MP3_SCORE       "SCORE.mp3"
 #define MP3_HIGHSCORE   "HIGHSCORE.mp3"
+#define MP3_PLAY_AGAIN  "PLAY-AGAIN.mp3"
 
+// Lose Phrases
+#define MP3_LOSE_1      "LOSE-1.mp3"
+#define MP3_LOSE_2      "LOSE-2.mp3"
+#define MP3_LOSE_3      "LOSE-3.mp3"
+#define MP3_LOSE_4      "LOSE-4.mp3"
+#define MP3_LOSE_5      "LOSE-5.mp3"
+#define MP3_LOSE_6      "LOSE-6.mp3"
+#define MP3_LOSE_7      "LOSE-7.mp3"
+#define MP3_LOSE_8      "LOSE-8.mp3"
+#define MP3_LOSE_9      "LOSE-9.mp3"
+#define MP3_LOSE_10     "LOSE-10.mp3"
+
+// For Simon Mode
+#define MP3_READY       "READY.mp3"
+#define MP3_FOLLOW      "FOLLOW.mp3"
 #define MP3_REPEAT      "REPEAT.mp3"
 #define MP3_GOOD_JOB    "GOOD-JOB.mp3"
 
+// Score Numbers
 #define MP3_1           "1.mp3"
 #define MP3_2           "2.mp3"
 #define MP3_3           "3.mp3"
@@ -52,9 +72,13 @@
 #define MP3_100         "100.mp3"
 
 // Sound Effects
-#define MP3_EFFECT_BOP  "EFFECT-PUNCH.mp3"
-#define MP3_EFFECT_PULL  "EFFECT-SLIDE-WHISTLE.mp3"
-#define MP3_EFFECT_FLICK  "EFFECT-BOUNCE.mp3"
-#define MP3_EFFECT_SLICE  "EFFECT-SWORD.mp3"
-#define MP3_EFFECT_TILT  "EFFECT-TICKLE.mp3"
-#define MP3_EFFECT_SHOUT  "EFFECT-RECORD-SCRATCH.mp3"
+#define MP3_EFFECT_BOP  "EFFECT-BOP.mp3"
+#define MP3_EFFECT_PULL  "EFFECT-PULL.mp3"
+#define MP3_EFFECT_FLICK  "EFFECT-FLICK.mp3"
+#define MP3_EFFECT_SLICE  "EFFECT-SLICE.mp3"
+#define MP3_EFFECT_TILT  "EFFECT-TILT.mp3"
+#define MP3_EFFECT_SHOUT  "EFFECT-SHOUT.mp3"
+
+// Sound Track
+#define MP3_SOUNDTRACK_1   "SOUNDTRACK-1.mp3" // Normal Mode
+#define MP3_SOUNDTRACK_2   "SOUNDTRACK-2.mp3"
