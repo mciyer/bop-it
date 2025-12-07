@@ -15,7 +15,7 @@
 #define MP3_COUNTDOWN_1 "COUNTDOWN-1.mp3"
 #define MP3_COUNTDOWN_2 "COUNTDOWN-2.mp3"
 #define MP3_COUNTDOWN_3 "COUNTDOWN-3.mp3"
-#define MP3_GO          "GO.mp3"
+#define MP3_GO          "COUNTDOWN-GO.mp3"
 
 // When game is over
 #define MP3_WIN         "WIN.mp3"
@@ -81,4 +81,4 @@
 
 // Sound Track
 #define MP3_SOUNDTRACK_1   "SOUNDTRACK-1.mp3" // Normal Mode
-#define MP3_SOUNDTRACK_2   "SOUNDTRACK-2.mp3"
+#define MP3_SOUNDTRACK_2   "SOUNDTRACK-2.mp3" // Simon Mode
