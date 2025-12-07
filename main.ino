@@ -3,6 +3,10 @@
 #include <MPU6050.h>
 #include <audio_files.h>
 
+// WIFI ADDED
+#include <WiFi.h>
+#include <WebServer.h>
+
 // Pins
 
 #define IR_PIN 14
@@ -30,7 +34,7 @@
 #define PULL_IT 5
 
 #define NUM_PARTS 6
-#define MAX_ROUNDS 100
+#define MAX_ROUNDS 10
 
 String VOICE_COMMAND[NUM_PARTS] = {
   MP3_BOP_IT,
@@ -66,6 +70,15 @@ String LOSE_PHRASES[10] = {
 // For Gyroscope
 MPU6050 mpu;
 
+
+// WIFI ADDED
+String current_action = "Idle";
+const char* ssid = "Bop_It";
+const char* pass = "cics_256";
+WebServer server(80);
+
+
+
 void setup() { 
   Serial.begin(115200);              // Serial Output setup
   delay(2000);     // WAIT for Processing to open USB bridge
@@ -88,6 +101,14 @@ void setup() {
   pinMode(IR_PIN, INPUT); // IR Sensor
   pinMode(BOPIT_PIN, INPUT_PULLUP);
   pinMode(PULLIT_PIN, INPUT_PULLUP);
+
+  //  ///// WIFI ADDED /////
+  // WiFi.mode(WIFI_AP);
+  // WiFi.softAP(ssid, pass);
+  // server.on("/", on_home);
+  // server.begin();
+  // Serial.println("WiFi AP started: http://192.168.4.1");
+  // ///// END WIFI /////
 }
 
 unsigned long timer_millis; // Default is 2 seconds
@@ -104,7 +125,7 @@ int highscore_simon = 0;
 
 
 void loop() {
-
+  // server.handleClient();  // WIFI ADDED
   int flicked = flickIt();  // Select the mode by flicking the joystick
   int bopped = bopIt(); // Start game in selected mode
 
@@ -139,10 +160,32 @@ void loop() {
     }
 
     playAudioFile(MP3_PLAY_AGAIN);
-    delay(3000);
   }
 
 }
+
+void on_home() {
+  if (in_normal_mode) {
+    server.send(200, "text/html",
+      "<meta http-equiv='refresh' content='1'>"
+      "<h1 style='font-size:60px; text-align:center;'>"
+      "Mode: Normal<br>"
+      "High score: " + String(highscore_normal) + "<br>"
+      "Current score: " + String(current_round) +
+      "</h1>"
+    );
+  } else {
+    server.send(200, "text/html",
+      "<meta http-equiv='refresh' content='1'>"
+      "<h1 style='font-size:60px; text-align:center;'>"
+      "Mode: Simon<br>"
+      "High score: " + String(highscore_simon) + "<br>"
+      "Current score: " + String(current_round) +
+      "</h1>"
+    );
+  }
+}
+
 
 void playAudioFile(String file) {
   Serial.println("PLAY:" + file);
@@ -367,8 +410,6 @@ void playNormalMode() {
     delay(grace_period);
 
   }
-
-
 
   // Step 7: Display score to player
   gameover(win);
