@@ -96,13 +96,15 @@ int current_round = 0;
 bool in_normal_mode = true;
 String soundtrack_file_path = MP3_SOUNDTRACK_1; // Soundtrack for normal mode
 
-void loop() {
-  // playAudioFile(MP3_START_GAME); // "Bop it to start!"
-  restart();
+// Scores
+int highscore_normal = 0;
+int highscore_simon = 0;
 
-  // Select the mode by flicking the joystick
-  int flicked = flickIt();
-  int bopped = bopIt();
+
+void loop() {
+
+  int flicked = flickIt();  // Select the mode by flicking the joystick
+  int bopped = bopIt(); // Start game in selected mode
 
   if (flicked) {  // Switches mode
     in_normal_mode = !in_normal_mode;
@@ -120,18 +122,23 @@ void loop() {
 
   // Push the BOP-IT button to start the game
   if (bopped) {
-    countdown();
+    gameSetup();
+    sayHighscore();
 
     if (in_normal_mode) {
+      countdown();
+      startSoundtrack();
       playNormalMode();
     }
     else {
+      readySetSimon();
+      startSoundtrack();
       playSimonMode();
     }
-  }
 
-  delay(1000);
-  playAudioFile(MP3_PLAY_AGAIN);
+    playAudioFile(MP3_PLAY_AGAIN);
+    delay(3000);
+  }
 
 }
 
@@ -141,7 +148,16 @@ void playAudioFile(String file) {
 
 void announceScore(String score) {
   playAudioFile(MP3_SCORE);
+  delay(1000);
   Serial.println("SCORE:" + score);
+  delay(2000);
+}
+
+void announceHighscore(String score) {
+  playAudioFile(MP3_HIGHSCORE);
+  delay(1200);
+  Serial.println("SCORE:" + score);
+  delay(2000);
 }
 
 void startSoundtrack() {
@@ -167,6 +183,7 @@ void playLosePhrase() {
   playAudioFile(LOSE_PHRASES[random(0, 10)]);
   delay(3000); // Ensures audio clip finishes
 }
+
 
 /**
  * Randomly the next action for the player to perform.
@@ -246,7 +263,37 @@ void countdown() {
   delay(1000);
 }
 
+void readySetSimon() {
+  playAudioFile(MP3_READY);
+  delay(1000);
+  playAudioFile(MP3_FOLLOW);
+  delay(1000);
+}
+
+void sayHighscore() {
+  if (in_normal_mode && highscore_normal > 0) {
+    announceHighscore(String(highscore_normal));
+    delay(2000);
+  }
+  else if (!in_normal_mode && highscore_simon > 0) {
+    announceHighscore(String(highscore_simon));
+    delay(2000);
+  }
+}
+
+void updateHighscore() {
+  // Updates highscore if needed
+  if (in_normal_mode) {
+    highscore_normal = max(highscore_normal, current_round);
+  }
+  else {
+    highscore_simon = max(highscore_simon, current_round);
+  }
+}
+
 void gameover(bool win) {
+  stopSoundtrack();
+
   if (win) {
     announceScore(String(current_round));
     delay(1000);
@@ -258,10 +305,18 @@ void gameover(bool win) {
     announceScore(String(current_round));
     delay(1000);
   }
+
+  updateHighscore();
+  
+}
+
+void gameSetup() {
+  timer_millis = 2500; 
+  grace_period = 2000; 
+  current_round = 0;
 }
 
 void playNormalMode() {
-  startSoundtrack();
   bool win = true;
   while (++current_round <= MAX_ROUNDS) {
     // After 10 rounds, reduce timer window by a quarter second (lowest time is half a second)
@@ -311,7 +366,7 @@ void playNormalMode() {
 
   }
 
-  stopSoundtrack();
+
 
   // Step 7: Display score to player
   gameover(win);
@@ -370,11 +425,9 @@ void playSimonMode() {
         break;
       }
 
-      // Play audio effect for all but last action in the sequence
-
+      // Play audio effect 
       playAudioFile(SOUND_EFFECT_ACTIONS[expected]);
       
-    
       // Little gap before next expected input
       delay(250);
     }
@@ -393,12 +446,6 @@ void playSimonMode() {
   // Step 4: End of game
   gameover(playing);
 
-}
-
-void restart() {
-  timer_millis = 2500; 
-  grace_period = 2000; 
-  current_round = 0;
 }
 
 

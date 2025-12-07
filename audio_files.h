@@ -1,7 +1,7 @@
 // Voice-Acted
-#define MP3_NORMAL_MODE "NORMAL-MODE.mp3"
-#define MP3_SIMON_MODE  "SIMON-MODE.mp3"
-#define MP3_START_GAME  "START-GAME.mp3"
+#define MP3_NORMAL_MODE "MODE-NORMAL.mp3"
+#define MP3_SIMON_MODE  "MODE-SIMON.mp3"
+#define MP3_START_GAME  "GAME-START.mp3"
 
 // Action Commands
 #define MP3_BOP_IT      "ACT-BOP-IT.mp3"
