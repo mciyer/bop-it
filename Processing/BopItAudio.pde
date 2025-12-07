@@ -75,9 +75,9 @@ void tellScore(String line) { // yields e.g "16"
     int ones_digit = score % 10;
     
     playAudio(tens_digit + ".mp3");
-    delay(800);
+    delay(1000);
     playAudio(ones_digit + ".mp3");
-    delay(800);
+    delay(1000);
   }
   
   
