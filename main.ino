@@ -5,14 +5,14 @@
 
 // Pins
 
-#define IR_PIN 25
+#define IR_PIN 14
 #define MIC_PIN 13
-#define JOYSTICK_X_PIN 27
-#define JOYSTICK_Y_PIN 26
+#define JOYSTICK_X_PIN 32
+#define JOYSTICK_Y_PIN 35
 #define SDA_PIN 21
 #define SCL_PIN 22
 #define BOPIT_PIN 34
-#define PULLIT_PIN 12
+#define PULLIT_PIN 15
 
 // Gyroscope States
 
@@ -29,7 +29,7 @@
 #define SHOUT_IT 4
 #define PULL_IT 5
 
-#define NUM_PARTS 5
+#define NUM_PARTS 6
 #define MAX_ROUNDS 100
 
 String VOICE_COMMAND[NUM_PARTS] = {
@@ -37,8 +37,8 @@ String VOICE_COMMAND[NUM_PARTS] = {
   MP3_FLICK_IT,
   MP3_SLICE_IT,
   MP3_TILT_IT,
-  MP3_SHOUT_IT
-  // MP3_PULL_IT
+  MP3_SHOUT_IT,
+  MP3_PULL_IT
 };
 
 String SOUND_EFFECT_ACTIONS[NUM_PARTS] = {
@@ -46,8 +46,8 @@ String SOUND_EFFECT_ACTIONS[NUM_PARTS] = {
   MP3_EFFECT_FLICK, 
   MP3_EFFECT_SLICE, 
   MP3_EFFECT_TILT, 
-  MP3_EFFECT_SHOUT
-  // MP3_EFFECT_PULL
+  MP3_EFFECT_SHOUT,
+  MP3_EFFECT_PULL
 };
 
 String LOSE_PHRASES[10] = {
@@ -87,10 +87,12 @@ void setup() {
   // Other Component Setup
   pinMode(IR_PIN, INPUT); // IR Sensor
   pinMode(BOPIT_PIN, INPUT_PULLUP);
+  pinMode(PULLIT_PIN, INPUT_PULLUP);
 }
 
 unsigned long timer_millis; // Default is 2 seconds
 unsigned long grace_period; // Delay between actions performed
+unsigned long action_delay = 1000; // 1 sec extra 
 
 int current_round = 0;
 bool in_normal_mode = true;
@@ -218,7 +220,7 @@ int checkInput(int input, int expected_input) {
 int readInputs(int correct_input) {
   int bop_value = bopIt();
   int flick_value = flickIt();
-  // int pull_value = pullIt();
+  int pull_value = pullIt();
   int shout_value = shoutIt();
   int slice_value = sliceIt();
   int tilt_value = tiltIt();
@@ -235,9 +237,9 @@ int readInputs(int correct_input) {
     return checkInput(BOP_IT, correct_input);
   }
 
-  // if (pull_value) {
-  //   return checkInput(PULL_IT, correct_input);
-  // }
+  if (pull_value) {
+    return checkInput(PULL_IT, correct_input);
+  }
 
   if (tilt_value) {
     return checkInput(TILT_IT, correct_input);
@@ -338,7 +340,7 @@ void playNormalMode() {
     
     // Step 4: Read all inputs until the timer runs out
     bool success = false;
-    while ((millis() - start_time) < timer_millis) {
+    while ((millis() - start_time) < (timer_millis + action_delay)) {
       int status = readInputs(action);
 
       if (status == 0) { // Correct action inputted
@@ -486,7 +488,7 @@ int sliceIt() {
 bool pull_idle = true;
 
 int pullIt() {
-  int pulled = (digitalRead(PULLIT_PIN) == LOW);
+  int pulled = (digitalRead(PULLIT_PIN) == HIGH);
 
   if (pulled && pull_idle) {
     pull_idle = false;
