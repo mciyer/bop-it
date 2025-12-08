@@ -8,8 +8,10 @@
 #define MP3_PULL_IT     "ACT-PULL-IT.mp3"
 #define MP3_FLICK_IT    "ACT-FLICK-IT.mp3"
 #define MP3_SLICE_IT    "ACT-SLICE-IT.mp3"
-#define MP3_TILT_IT     "ACT-TILT-IT.mp3"
 #define MP3_SHOUT_IT    "ACT-SHOUT-IT.mp3"
+#define MP3_TILT_IT     "ACT-TILT-IT.mp3"
+#define MP3_LEFT_TILT   "ACT-TILT-LEFT.mp3"
+#define MP3_RIGHT_TILT  "ACT-TILT-RIGHT.mp3"
 
 // Countdown
 #define MP3_COUNTDOWN_1 "COUNTDOWN-1.mp3"
@@ -76,8 +78,10 @@
 #define MP3_EFFECT_PULL  "EFFECT-PULL.mp3"
 #define MP3_EFFECT_FLICK  "EFFECT-FLICK.mp3"
 #define MP3_EFFECT_SLICE  "EFFECT-SLICE.mp3"
-#define MP3_EFFECT_TILT  "EFFECT-TILT.mp3"
 #define MP3_EFFECT_SHOUT  "EFFECT-SHOUT.mp3"
+#define MP3_EFFECT_TILT  "EFFECT-TILT.mp3"
+#define MP3_EFFECT_LEFT_TILT  "EFFECT-TILT.mp3"
+#define MP3_EFFECT_RIGHT_TILT  "EFFECT-TILT.mp3"
 
 // Sound Track
 #define MP3_SOUNDTRACK_1   "SOUNDTRACK-1.mp3" // Normal Mode

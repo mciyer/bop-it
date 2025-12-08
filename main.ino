@@ -27,31 +27,37 @@
 // Action Enum
 
 #define BOP_IT 0
-#define FLICK_IT 1
-#define SLICE_IT 2
-#define TILT_IT 3
+#define PULL_IT 1
+#define FLICK_IT 2
+#define SLICE_IT 3
 #define SHOUT_IT 4
-#define PULL_IT 5
+#define TILT_IT 5
+#define LEFT_TILT 6
+#define RIGHT_TILT 7
 
-#define NUM_PARTS 6
+#define NUM_PARTS 8
 #define MAX_ROUNDS 100
 
 String VOICE_COMMAND[NUM_PARTS] = {
   MP3_BOP_IT,
+  MP3_PULL_IT,
   MP3_FLICK_IT,
   MP3_SLICE_IT,
-  MP3_TILT_IT,
   MP3_SHOUT_IT,
-  MP3_PULL_IT
+  MP3_TILT_IT,
+  MP3_LEFT_TILT,
+  MP3_RIGHT_TILT
 };
 
 String SOUND_EFFECT_ACTIONS[NUM_PARTS] = {
   MP3_EFFECT_BOP, 
+  MP3_EFFECT_PULL,
   MP3_EFFECT_FLICK, 
   MP3_EFFECT_SLICE, 
-  MP3_EFFECT_TILT, 
   MP3_EFFECT_SHOUT,
-  MP3_EFFECT_PULL
+  MP3_EFFECT_TILT,
+  MP3_EFFECT_LEFT_TILT,
+  MP3_EFFECT_RIGHT_TILT
 };
 
 String LOSE_PHRASES[10] = {
@@ -72,12 +78,9 @@ MPU6050 mpu6050;
 
 
 // WIFI ADDED
-String current_action = "Idle";
 const char* ssid = "Bop_It";
 const char* pass = "cics_256";
 WebServer server(80);
-
-
 
 void setup() { 
   Serial.begin(115200);              // Serial Output setup
@@ -116,7 +119,13 @@ unsigned long grace_period; // Delay between actions performed
 unsigned long action_delay = 1000; // 1 sec extra 
 
 int current_round = 0;
-int current_score = 0;
+
+int current_score_normal = 0;
+int current_score_simon = 0;
+
+int prev_score_normal = 0;
+int prev_score_simon = 0;
+
 bool in_normal_mode = true;
 String soundtrack_file_path = MP3_SOUNDTRACK_1; // Soundtrack for normal mode
 
@@ -172,6 +181,7 @@ void on_home() {
       "<h1 style='font-size:60px; text-align:center;'>"
       "Mode: Normal<br>"
       "Highscore: " + String(highscore_normal) + "<br>"
+      "Previous Score: " + String(prev_score_normal) + "<br>"
       "</h1>"
     );
   } else {
@@ -180,6 +190,7 @@ void on_home() {
       "<h1 style='font-size:60px; text-align:center;'>"
       "Mode: Simon<br>"
       "Highscore: " + String(highscore_simon) + "<br>"
+      "Previous Score: " + String(prev_score_simon) + "<br>"
       "</h1>"
     );
   }
@@ -283,9 +294,26 @@ int readInputs(int correct_input) {
     return checkInput(PULL_IT, correct_input);
   }
 
+  
   if (tilt_value) {
-    return checkInput(TILT_IT, correct_input);
-  }
+    // tilt_value = 1 (right), -1 (left)
+
+    if (correct_input == TILT_IT) {
+      // Accept either tilt direction
+      return 0;
+    }
+
+    if (correct_input == RIGHT_TILT && tilt_value < 0) {
+      return 0;
+    }
+
+    if (correct_input == LEFT_TILT && tilt_value > 0) {
+      return 0;
+    }
+
+    // Wrong tilt direction
+    return 1;
+}
 
   if (shout_value && correct_input == SHOUT_IT) {
     return checkInput(SHOUT_IT, correct_input);
@@ -325,13 +353,29 @@ void sayHighscore() {
   }
 }
 
-void updateHighscore() {
-  // Updates highscore if needed
+void updateScores() {
+  // Updates previous scores and (highscore if needed)
   if (in_normal_mode) {
-    highscore_normal = max(highscore_normal, current_score);
+    prev_score_normal = current_score_normal;
+    highscore_normal = max(highscore_normal, current_score_normal);
   }
   else {
-    highscore_simon = max(highscore_simon, current_score);
+    prev_score_simon = current_score_simon;
+    highscore_simon = max(highscore_simon, current_score_simon);
+  }
+
+}
+
+int getScore() {
+  return in_normal_mode ? current_score_normal : current_score_simon;
+}
+
+void incScore() {
+  if (in_normal_mode) {
+    current_score_normal++;
+  }
+  else {
+    current_score_simon++;
   }
 }
 
@@ -341,20 +385,20 @@ void gameover(bool win) {
   if (win) {
  
 
-    announceScore(String(current_score));
+    announceScore(String(getScore()));
     delay(1000);
     playAudioFile(MP3_WIN);
     delay(2500);
   }
   else {
     playLosePhrase();
-    if (current_score > 0) {
-      announceScore(String(current_score));
+    if (getScore() > 0) {
+      announceScore(String(getScore()));
     }
     delay(1000);
   }
 
-  updateHighscore();
+  updateScores();
   
 }
 
@@ -362,7 +406,8 @@ void gameSetup() {
   timer_millis = 2500; 
   grace_period = 2000; 
   current_round = 0;
-  current_score = 0;
+  current_score_normal = 0;
+  current_score_simon = 0;
 }
 
 void playNormalMode() {
@@ -407,7 +452,7 @@ void playNormalMode() {
       break;
     }
     else {
-      current_score++;
+      incScore();
       playAudioFile(SOUND_EFFECT_ACTIONS[action]);
     }
 
@@ -483,12 +528,12 @@ void playSimonMode() {
     // Pause before next round (sequence grows)
     if (playing) {
       // Performed the correct 
-      current_score++;
-      delay(1000);
+      incScore();
+      delay(750);
       Serial.println();
       playAudioFile(MP3_GOOD_JOB);
       Serial.println();
-      delay(1500);
+      delay(1400);
     }
   }
   
@@ -497,7 +542,7 @@ void playSimonMode() {
 
 }
 
-
+// INPUT FUNCTIONS //
 bool bop_idle = true;
 
 int bopIt() {
