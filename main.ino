@@ -10,7 +10,7 @@
 // Pins
 
 #define IR_PIN 14
-#define MIC_PIN 13
+#define MIC_PIN 33
 #define JOYSTICK_X_PIN 32
 #define JOYSTICK_Y_PIN 35
 #define SDA_PIN 21
@@ -68,7 +68,7 @@ String LOSE_PHRASES[10] = {
 };
 
 // For Gyroscope
-MPU6050 mpu;
+MPU6050 mpu6050;
 
 
 // WIFI ADDED
@@ -90,9 +90,9 @@ void setup() {
 
   // Gyroscope Setup
   Wire.begin(SDA_PIN, SCL_PIN);  // SDA, SCL on ESP32
-  mpu.initialize();
+  mpu6050.initialize();
 
-  if (!mpu.testConnection()) {  
+  if (!mpu6050.testConnection()) {  
     Serial.println("MPU6050 connection failed!");
     while (1);
   }
@@ -102,13 +102,13 @@ void setup() {
   pinMode(BOPIT_PIN, INPUT_PULLUP);
   pinMode(PULLIT_PIN, INPUT_PULLUP);
 
-  //  ///// WIFI ADDED /////
-  // WiFi.mode(WIFI_AP);
-  // WiFi.softAP(ssid, pass);
-  // server.on("/", on_home);
-  // server.begin();
-  // Serial.println("WiFi AP started: http://192.168.4.1");
-  // ///// END WIFI /////
+   ///// WIFI ADDED /////
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(ssid, pass);
+  server.on("/", on_home);
+  server.begin();
+  Serial.println("WiFi AP started: http://192.168.4.1");
+  ///// END WIFI /////
 }
 
 unsigned long timer_millis; // Default is 2 seconds
@@ -126,7 +126,7 @@ int highscore_simon = 0;
 
 
 void loop() {
-  // server.handleClient();  // WIFI ADDED
+  server.handleClient();  // WIFI ADDED
   int flicked = flickIt();  // Select the mode by flicking the joystick
   int bopped = bopIt(); // Start game in selected mode
 
@@ -171,7 +171,7 @@ void on_home() {
       "<meta http-equiv='refresh' content='1'>"
       "<h1 style='font-size:60px; text-align:center;'>"
       "Mode: Normal<br>"
-      "High score: " + String(highscore_normal) + "<br>"
+      "Highscore: " + String(highscore_normal) + "<br>"
       "</h1>"
     );
   } else {
@@ -179,7 +179,7 @@ void on_home() {
       "<meta http-equiv='refresh' content='1'>"
       "<h1 style='font-size:60px; text-align:center;'>"
       "Mode: Simon<br>"
-      "High score: " + String(highscore_simon) + "<br>"
+      "Highscore: " + String(highscore_simon) + "<br>"
       "</h1>"
     );
   }
@@ -616,50 +616,65 @@ bool flickIt() {
  * @return 0 if center, 1 if tilt right, -1 if tilt left
  */
 int tiltIt() {
-  static int last_state = GYRO_CENTER;   // persistent across calls
+  static int last_state = GYRO_CENTER;
   static bool waiting_for_center = false;
 
+  // ---- NEW smoothing variables ----
+  static float smoothedAngle = 0;
+  const float smoothFactor = 0.85;
+
+  // ---- NEW debounce variables ----
+  static unsigned long tiltStart = 0;
+  const unsigned long tiltHoldTime = 120;
+
+  const float DEADZONE = 50.0;
+
+  // Read gyro/accel data
   int16_t ax, ay, az, gx, gy, gz;
-  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+  mpu6050.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
-  // Because the board is mounted upside-down, invert Z
-  az = -az;
-
+  // Convert raw values to g's
   float ay_g = ay / 16384.0;
   float az_g = az / 16384.0;
 
-  float angle = atan2(ay_g, az_g) * 180.0 / PI;
+  // ---- FLIP Z AXIS (gyroscope is upside down) ----
+  az_g = -az_g;
 
-  const float DEADZONE = 37.5;
+  // Raw tilt angle
+  float rawAngle = atan2(ay_g, az_g) * 180.0 / PI;
 
+  // Smooth it
+  smoothedAngle = (smoothFactor * smoothedAngle) + ((1.0 - smoothFactor) * rawAngle);
+  float angle = smoothedAngle;
+
+  // Determine tilt state
   int state = GYRO_CENTER;
+  if (angle > DEADZONE)       state = GYRO_RIGHT;
+  else if (angle < -DEADZONE) state = GYRO_LEFT;
 
-  if (angle > DEADZONE) {
-    state = GYRO_RIGHT;
-  } else if (angle < -DEADZONE) {
-    state = GYRO_LEFT;
-  } else {
-    state = GYRO_CENTER;
-  }
-
-  //  Waiting to return to center:
+  // Require return to center after tilt
   if (waiting_for_center) {
     if (state == GYRO_CENTER) {
-      waiting_for_center = false;   // reset cycle
+      waiting_for_center = false;
+      last_state = GYRO_CENTER;
     }
-    return GYRO_CENTER;  // suppress all outputs while held
+    return GYRO_CENTER;
   }
 
-  // Detect a new tilt:
+  // Start potential tilt
   if (last_state == GYRO_CENTER && state != GYRO_CENTER) {
-    waiting_for_center = true;    // block until centered again
+    tiltStart = millis();
     last_state = state;
-    return state;                 // this is the one valid tilt event
+    return GYRO_CENTER;
   }
 
-  // Otherwise update last state and return center
-  last_state = state;
+  // Confirm tilt
+  if (state != GYRO_CENTER && (millis() - tiltStart) > tiltHoldTime) {
+    waiting_for_center = true;
+    last_state = state;
+    return state;
+  }
+
   return GYRO_CENTER;
 }
-
 
