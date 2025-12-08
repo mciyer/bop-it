@@ -34,7 +34,7 @@
 #define PULL_IT 5
 
 #define NUM_PARTS 6
-#define MAX_ROUNDS 10
+#define MAX_ROUNDS 100
 
 String VOICE_COMMAND[NUM_PARTS] = {
   MP3_BOP_IT,
@@ -116,6 +116,7 @@ unsigned long grace_period; // Delay between actions performed
 unsigned long action_delay = 1000; // 1 sec extra 
 
 int current_round = 0;
+int current_score = 0;
 bool in_normal_mode = true;
 String soundtrack_file_path = MP3_SOUNDTRACK_1; // Soundtrack for normal mode
 
@@ -171,7 +172,6 @@ void on_home() {
       "<h1 style='font-size:60px; text-align:center;'>"
       "Mode: Normal<br>"
       "High score: " + String(highscore_normal) + "<br>"
-      "Current score: " + String(current_round) +
       "</h1>"
     );
   } else {
@@ -180,7 +180,6 @@ void on_home() {
       "<h1 style='font-size:60px; text-align:center;'>"
       "Mode: Simon<br>"
       "High score: " + String(highscore_simon) + "<br>"
-      "Current score: " + String(current_round) +
       "</h1>"
     );
   }
@@ -329,10 +328,10 @@ void sayHighscore() {
 void updateHighscore() {
   // Updates highscore if needed
   if (in_normal_mode) {
-    highscore_normal = max(highscore_normal, current_round);
+    highscore_normal = max(highscore_normal, current_score);
   }
   else {
-    highscore_simon = max(highscore_simon, current_round);
+    highscore_simon = max(highscore_simon, current_score);
   }
 }
 
@@ -340,14 +339,18 @@ void gameover(bool win) {
   stopSoundtrack();
 
   if (win) {
-    announceScore(String(current_round));
+ 
+
+    announceScore(String(current_score));
     delay(1000);
     playAudioFile(MP3_WIN);
     delay(2500);
   }
   else {
     playLosePhrase();
-    announceScore(String(current_round));
+    if (current_score > 0) {
+      announceScore(String(current_score));
+    }
     delay(1000);
   }
 
@@ -359,6 +362,7 @@ void gameSetup() {
   timer_millis = 2500; 
   grace_period = 2000; 
   current_round = 0;
+  current_score = 0;
 }
 
 void playNormalMode() {
@@ -403,6 +407,7 @@ void playNormalMode() {
       break;
     }
     else {
+      current_score++;
       playAudioFile(SOUND_EFFECT_ACTIONS[action]);
     }
 
@@ -472,12 +477,13 @@ void playSimonMode() {
       playAudioFile(SOUND_EFFECT_ACTIONS[expected]);
       
       // Little gap before next expected input
-      delay(250);
+      delay(500);
     }
 
     // Pause before next round (sequence grows)
     if (playing) {
       // Performed the correct 
+      current_score++;
       delay(1000);
       Serial.println();
       playAudioFile(MP3_GOOD_JOB);
