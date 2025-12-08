@@ -3,10 +3,14 @@
 #include <MPU6050.h>
 #include <audio_files.h>
 
+// WIFI ADDED
+#include <WiFi.h>
+#include <WebServer.h>
+
 // Pins
 
 #define IR_PIN 14
-#define MIC_PIN 13
+#define MIC_PIN 33
 #define JOYSTICK_X_PIN 32
 #define JOYSTICK_Y_PIN 35
 #define SDA_PIN 21
@@ -64,7 +68,16 @@ String LOSE_PHRASES[10] = {
 };
 
 // For Gyroscope
-MPU6050 mpu;
+MPU6050 mpu6050;
+
+
+// WIFI ADDED
+String current_action = "Idle";
+const char* ssid = "Bop_It";
+const char* pass = "cics_256";
+WebServer server(80);
+
+
 
 void setup() { 
   Serial.begin(115200);              // Serial Output setup
@@ -77,9 +90,9 @@ void setup() {
 
   // Gyroscope Setup
   Wire.begin(SDA_PIN, SCL_PIN);  // SDA, SCL on ESP32
-  mpu.initialize();
+  mpu6050.initialize();
 
-  if (!mpu.testConnection()) {  
+  if (!mpu6050.testConnection()) {  
     Serial.println("MPU6050 connection failed!");
     while (1);
   }
@@ -88,6 +101,14 @@ void setup() {
   pinMode(IR_PIN, INPUT); // IR Sensor
   pinMode(BOPIT_PIN, INPUT_PULLUP);
   pinMode(PULLIT_PIN, INPUT_PULLUP);
+
+   ///// WIFI ADDED /////
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(ssid, pass);
+  server.on("/", on_home);
+  server.begin();
+  Serial.println("WiFi AP started: http://192.168.4.1");
+  ///// END WIFI /////
 }
 
 unsigned long timer_millis; // Default is 2 seconds
@@ -95,6 +116,7 @@ unsigned long grace_period; // Delay between actions performed
 unsigned long action_delay = 1000; // 1 sec extra 
 
 int current_round = 0;
+int current_score = 0;
 bool in_normal_mode = true;
 String soundtrack_file_path = MP3_SOUNDTRACK_1; // Soundtrack for normal mode
 
@@ -104,7 +126,7 @@ int highscore_simon = 0;
 
 
 void loop() {
-
+  server.handleClient();  // WIFI ADDED
   int flicked = flickIt();  // Select the mode by flicking the joystick
   int bopped = bopIt(); // Start game in selected mode
 
@@ -139,10 +161,30 @@ void loop() {
     }
 
     playAudioFile(MP3_PLAY_AGAIN);
-    delay(3000);
   }
 
 }
+
+void on_home() {
+  if (in_normal_mode) {
+    server.send(200, "text/html",
+      "<meta http-equiv='refresh' content='1'>"
+      "<h1 style='font-size:60px; text-align:center;'>"
+      "Mode: Normal<br>"
+      "Highscore: " + String(highscore_normal) + "<br>"
+      "</h1>"
+    );
+  } else {
+    server.send(200, "text/html",
+      "<meta http-equiv='refresh' content='1'>"
+      "<h1 style='font-size:60px; text-align:center;'>"
+      "Mode: Simon<br>"
+      "Highscore: " + String(highscore_simon) + "<br>"
+      "</h1>"
+    );
+  }
+}
+
 
 void playAudioFile(String file) {
   Serial.println("PLAY:" + file);
@@ -286,10 +328,10 @@ void sayHighscore() {
 void updateHighscore() {
   // Updates highscore if needed
   if (in_normal_mode) {
-    highscore_normal = max(highscore_normal, current_round);
+    highscore_normal = max(highscore_normal, current_score);
   }
   else {
-    highscore_simon = max(highscore_simon, current_round);
+    highscore_simon = max(highscore_simon, current_score);
   }
 }
 
@@ -297,14 +339,18 @@ void gameover(bool win) {
   stopSoundtrack();
 
   if (win) {
-    announceScore(String(current_round));
+ 
+
+    announceScore(String(current_score));
     delay(1000);
     playAudioFile(MP3_WIN);
     delay(2500);
   }
   else {
     playLosePhrase();
-    announceScore(String(current_round));
+    if (current_score > 0) {
+      announceScore(String(current_score));
+    }
     delay(1000);
   }
 
@@ -316,6 +362,7 @@ void gameSetup() {
   timer_millis = 2500; 
   grace_period = 2000; 
   current_round = 0;
+  current_score = 0;
 }
 
 void playNormalMode() {
@@ -360,6 +407,7 @@ void playNormalMode() {
       break;
     }
     else {
+      current_score++;
       playAudioFile(SOUND_EFFECT_ACTIONS[action]);
     }
 
@@ -367,8 +415,6 @@ void playNormalMode() {
     delay(grace_period);
 
   }
-
-
 
   // Step 7: Display score to player
   gameover(win);
@@ -431,12 +477,13 @@ void playSimonMode() {
       playAudioFile(SOUND_EFFECT_ACTIONS[expected]);
       
       // Little gap before next expected input
-      delay(250);
+      delay(500);
     }
 
     // Pause before next round (sequence grows)
     if (playing) {
       // Performed the correct 
+      current_score++;
       delay(1000);
       Serial.println();
       playAudioFile(MP3_GOOD_JOB);
@@ -569,50 +616,65 @@ bool flickIt() {
  * @return 0 if center, 1 if tilt right, -1 if tilt left
  */
 int tiltIt() {
-  static int last_state = GYRO_CENTER;   // persistent across calls
+  static int last_state = GYRO_CENTER;
   static bool waiting_for_center = false;
 
+  // ---- NEW smoothing variables ----
+  static float smoothedAngle = 0;
+  const float smoothFactor = 0.85;
+
+  // ---- NEW debounce variables ----
+  static unsigned long tiltStart = 0;
+  const unsigned long tiltHoldTime = 120;
+
+  const float DEADZONE = 50.0;
+
+  // Read gyro/accel data
   int16_t ax, ay, az, gx, gy, gz;
-  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+  mpu6050.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
-  // Because the board is mounted upside-down, invert Z
-  az = -az;
-
+  // Convert raw values to g's
   float ay_g = ay / 16384.0;
   float az_g = az / 16384.0;
 
-  float angle = atan2(ay_g, az_g) * 180.0 / PI;
+  // ---- FLIP Z AXIS (gyroscope is upside down) ----
+  az_g = -az_g;
 
-  const float DEADZONE = 37.5;
+  // Raw tilt angle
+  float rawAngle = atan2(ay_g, az_g) * 180.0 / PI;
 
+  // Smooth it
+  smoothedAngle = (smoothFactor * smoothedAngle) + ((1.0 - smoothFactor) * rawAngle);
+  float angle = smoothedAngle;
+
+  // Determine tilt state
   int state = GYRO_CENTER;
+  if (angle > DEADZONE)       state = GYRO_RIGHT;
+  else if (angle < -DEADZONE) state = GYRO_LEFT;
 
-  if (angle > DEADZONE) {
-    state = GYRO_RIGHT;
-  } else if (angle < -DEADZONE) {
-    state = GYRO_LEFT;
-  } else {
-    state = GYRO_CENTER;
-  }
-
-  //  Waiting to return to center:
+  // Require return to center after tilt
   if (waiting_for_center) {
     if (state == GYRO_CENTER) {
-      waiting_for_center = false;   // reset cycle
+      waiting_for_center = false;
+      last_state = GYRO_CENTER;
     }
-    return GYRO_CENTER;  // suppress all outputs while held
+    return GYRO_CENTER;
   }
 
-  // Detect a new tilt:
+  // Start potential tilt
   if (last_state == GYRO_CENTER && state != GYRO_CENTER) {
-    waiting_for_center = true;    // block until centered again
+    tiltStart = millis();
     last_state = state;
-    return state;                 // this is the one valid tilt event
+    return GYRO_CENTER;
   }
 
-  // Otherwise update last state and return center
-  last_state = state;
+  // Confirm tilt
+  if (state != GYRO_CENTER && (millis() - tiltStart) > tiltHoldTime) {
+    waiting_for_center = true;
+    last_state = state;
+    return state;
+  }
+
   return GYRO_CENTER;
 }
-
 
